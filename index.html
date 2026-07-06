@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Backend Office Team</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#252a34; --accent:#4f8cff; --txt:#e6e9ef; --mut:#8b93a5; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--txt); }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+  header h1 { font-size:16px; margin:0; }
+  .dot { width:9px; height:9px; border-radius:50%; background:#39d98a; box-shadow:0 0 8px #39d98a; }
+  .wrap { display:grid; grid-template-columns:1fr 320px; gap:0; height:calc(100vh - 51px); }
+  .chat { display:flex; flex-direction:column; }
+  .msgs { flex:1; overflow-y:auto; padding:20px; }
+  .m { max-width:80%; padding:10px 14px; border-radius:12px; margin-bottom:12px; white-space:pre-wrap; line-height:1.5; }
+  .m.user { background:var(--accent); margin-left:auto; }
+  .m.bot { background:var(--panel); border:1px solid var(--line); }
+  .inbar { display:flex; gap:8px; padding:14px; border-top:1px solid var(--line); }
+  .inbar input { flex:1; background:var(--panel); border:1px solid var(--line); color:var(--txt); padding:12px 14px; border-radius:10px; font-size:14px; }
+  .inbar button, .side button { background:var(--accent); border:none; color:#fff; padding:12px 18px; border-radius:10px; cursor:pointer; font-weight:600; }
+  .side { border-left:1px solid var(--line); padding:16px; overflow-y:auto; }
+  .side h3 { font-size:12px; text-transform:uppercase; color:var(--mut); letter-spacing:.5px; margin:18px 0 8px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; font-size:13px; }
+  .card small { color:var(--mut); }
+  .row { display:flex; gap:6px; margin-top:8px; }
+  .row button { flex:1; padding:8px; font-size:12px; }
+  .no { background:#33373f; }
+  .team { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .chip { font-size:11px; background:var(--panel); border:1px solid var(--line); padding:4px 8px; border-radius:20px; color:var(--mut); }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot"></span>
+  <h1>My Backend Office Team</h1>
+  <span style="color:var(--mut);font-size:12px;">24/7 &middot; Hetzner</span>
+</header>
+<div class="wrap">
+  <div class="chat">
+    <div class="msgs" id="msgs"></div>
+    <div class="inbar">
+      <input id="cmd" placeholder="Command do... jaise: 'AI news pe research karke PDF banao aur mujhe email draft karo'" onkeydown="if(event.key==='Enter')send()">
+      <button onclick="send()">Send</button>
+    </div>
+  </div>
+  <div class="side">
+    <h3>Team</h3>
+    <div class="team">
+      <span class="chip">Manager</span><span class="chip">Researcher</span>
+      <span class="chip">Doc-maker</span><span class="chip">Data/Excel</span>
+      <span class="chip">Mailer</span><span class="chip">WhatsApp</span>
+    </div>
+    <h3>Schedule banao</h3>
+    <div class="card">
+      <input id="scron" placeholder="cron: 0 20 * * *" style="width:100%;margin-bottom:6px;background:#0f1115;border:1px solid var(--line);color:var(--txt);padding:8px;border-radius:8px;">
+      <input id="scmd" placeholder="kya kaam roz karna hai" style="width:100%;background:#0f1115;border:1px solid var(--line);color:var(--txt);padding:8px;border-radius:8px;">
+      <div class="row"><button onclick="schedule()">Set daily</button></div>
+      <small>0 20 * * * = roz raat 8 baje</small>
+    </div>
+    <h3>Approvals</h3>
+    <div id="pending"></div>
+    <h3>Recent tasks</h3>
+    <div id="tasks"></div>
+  </div>
+</div>
+<script>
+async function api(path, body){
+  const opt = { headers:{'Content-Type':'application/json'} };
+  if(body){ opt.method='POST'; opt.body=JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  return r.json();
+}
+function bubble(role, text){
+  const d=document.createElement('div'); d.className='m '+(role==='user'?'user':'bot');
+  d.textContent=text; document.getElementById('msgs').appendChild(d);
+  d.scrollIntoView();
+}
+async function send(){
+  const el=document.getElementById('cmd'); const c=el.value.trim(); if(!c)return;
+  bubble('user',c); el.value='';
+  await api('/api/command',{command:c});
+  bubble('bot','Team kaam pe lag gayi... (thodi der mein result aayega, refresh hota rahega)');
+}
+async function schedule(){
+  const cron=document.getElementById('scron').value.trim();
+  const cmd=document.getElementById('scmd').value.trim();
+  if(!cron||!cmd)return;
+  await api('/api/schedule',{cron,command:cmd});
+  document.getElementById('scron').value=''; document.getElementById('scmd').value='';
+  refresh();
+}
+async function confirm(id, approve){ await api('/api/confirm',{id,approve}); refresh(); }
+async function refresh(){
+  const d=await api('/api/history');
+  // pending
+  const P=document.getElementById('pending'); P.innerHTML='';
+  (d.pending||[]).forEach(p=>{
+    const c=document.createElement('div'); c.className='card';
+    c.innerHTML=`<b>${p.kind}</b><br>${p.summary}<div class="row">
+      <button onclick="confirm(${p.id},true)">Send</button>
+      <button class="no" onclick="confirm(${p.id},false)">Discard</button></div>`;
+    P.appendChild(c);
+  });
+  if(!(d.pending||[]).length) P.innerHTML='<small style="color:var(--mut)">koi pending nahi</small>';
+  // tasks
+  const T=document.getElementById('tasks'); T.innerHTML='';
+  (d.tasks||[]).slice(0,8).forEach(t=>{
+    const c=document.createElement('div'); c.className='card';
+    c.innerHTML=`<b>#${t.id}</b> <small>${t.status}</small><br>${(t.command||'').slice(0,70)}`;
+    T.appendChild(c);
+  });
+}
+setInterval(refresh, 4000); refresh();
+</script>
+</body>
+</html>
